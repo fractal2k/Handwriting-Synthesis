@@ -1,0 +1,12 @@
+SRC_DIR = '/home/sujayrokade/hsynthesis/dataset'
+BATCH_SIZE = 64
+NUM_TOKENS = 27
+EMBEDDING_SIZE = 128
+NUM_LAYERS = 4 # Ideally 4
+PADDING_IDX = 0
+Z_LEN = 128
+CHUNKS = 8
+CBN_MLP_DIM = 512
+RELEVANCE_FACTOR = 1
+LEARNING_RATE = 2e-4
+BETAS = (0, 0.999)
