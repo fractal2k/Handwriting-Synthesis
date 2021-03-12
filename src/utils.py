@@ -10,10 +10,11 @@ def imshow(inp, filename):
     inp = inp.numpy().transpose((1, 2, 0))
 
     plt.imsave(filename, inp)
+    plt.close(fig)
 
 
 def convert_word(word):
-    return [27 if c == '-' else ord(c) - 96 for c in word]
+    return [27 if c == "-" else ord(c) - 96 for c in word]
 
 
 def preprocess_labels(labels):
