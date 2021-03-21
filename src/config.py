@@ -1,8 +1,10 @@
-SRC_DIR = '/home/sujayrokade/hsynthesis/dataset'
+SRC_DIR = "/home/sujayrokade/hsynthesis/dataset"
+OUT_DIR = "/home/sujayrokade/hsynthesis/src/out"
+RUNS_DIR = "/home/sujayrokade/hsynthesis/src/runs"
 BATCH_SIZE = 64
 NUM_TOKENS = 27
 EMBEDDING_SIZE = 128
-NUM_LAYERS = 4 # Ideally 4
+NUM_LAYERS = 4  # Ideally 4
 PADDING_IDX = 0
 Z_LEN = 128
 CHUNKS = 8

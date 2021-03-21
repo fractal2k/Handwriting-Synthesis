@@ -1,7 +1,15 @@
 import torch
 import torch.nn as nn
 from torch.nn.utils import spectral_norm
-from layers import CBN, SelfAttention, ResBlockUp, ResBlockDown, ResBlock
+from layers import (
+    CBN,
+    SelfAttention,
+    ResBlockUp,
+    ResBlockDown,
+    ResBlock,
+    GatedConvolution2d,
+    ConvolutionalEncoder,
+)
 
 
 class AlphabetLSTM(nn.Module):
@@ -143,91 +151,92 @@ class DiscriminatorNetwork(nn.Module):
         return self.dense(x).view([x.shape[0]])
 
 
-class GatedConvolutions(nn.Module):
-    """Gated Convolutional Encoder"""
-
-    def __init__(self, in_channels=1):
-        super(GatedConvolutions, self).__init__()
-
-        # Big version
-        self.conv1 = nn.Conv2d(in_channels, 8, kernel_size=3)
-        self.conv2 = nn.Conv2d(8, 16, kernel_size=(2, 4))
-        self.gate1 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(16, 32, kernel_size=3)
-        self.gate2 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.conv4 = nn.Conv2d(32, 64, kernel_size=(2, 4))
-        self.conv5 = nn.Conv2d(64, 128, kernel_size=3)
-        # Smol version
-        # self.conv1 = nn.Conv2d(in_channels, 4, kernel_size=3)
-        # self.conv2 = nn.Conv2d(4, 8, kernel_size=(2,4))
-        # self.gate1 = nn.Conv2d(8, 8, kernel_size=3, padding = 1)
-        # self.conv3 = nn.Conv2d(8, 16, kernel_size=3)
-        # self.gate2 = nn.Conv2d(16, 16, kernel_size=3, padding = 1)
-        # self.conv4 = nn.Conv2d(16, 24, kernel_size=(2,4))
-        # self.conv5 = nn.Conv2d(24, 32, kernel_size=3)
-        # self.conv6 = nn.Conv2d(32, 64, kernel_size=3)
-
-    def forward(self, x):
-        x = torch.tanh(self.conv1(x))
-        x = torch.tanh(self.conv2(x))
-        x = torch.sigmoid(self.gate1(x)) * x
-        x = torch.tanh(self.conv3(x))
-        x = torch.sigmoid(self.gate2(x)) * x
-        x = torch.tanh(self.conv4(x))
-        x = torch.tanh(self.conv5(x))
-        # x = torch.tanh(self.conv6(x))
-
-        return x
-
-
+# HTRFlor Model
 class R(nn.Module):
-    """Auxiliary "OCR" model to control the generator output"""
-
     def __init__(self):
         super(R, self).__init__()
-
-        self.encoder = GatedConvolutions(1)
-        self.maxpool = nn.MaxPool2d((120, 1))
-        # self.maxpool = nn.MaxPool2d((118, 1))
-
-        # Big version
-        self.lstm1 = nn.LSTM(
-            input_size=500,
-            hidden_size=64,
-            num_layers=1,
-            bidirectional=True,
-            batch_first=True,
+        self.encoder = ConvolutionalEncoder(1)
+        self.bgru1 = nn.GRU(
+            input_size=8192, hidden_size=128, bidirectional=True, batch_first=True
         )
-        self.linear1 = nn.Linear(128, 128)
-        self.lstm2 = nn.LSTM(
-            input_size=128,
-            hidden_size=128,
-            num_layers=1,
-            bidirectional=True,
-            batch_first=True,
+        self.dropout1 = nn.Dropout(0.5)
+        self.dense1 = nn.Linear(256, 256)
+        self.bgru2 = nn.GRU(
+            input_size=256, hidden_size=128, bidirectional=True, batch_first=True
         )
-        self.linear2 = nn.Linear(256, 27)
+        self.dropout2 = nn.Dropout(0.5)
+        self.out = nn.Linear(256, 27)
         self.softmax = nn.LogSoftmax(dim=1)
-
-        # Smol version doesn't work pls fix later
-        # self.lstm1 = nn.LSTM(498, 50, num_layers=1, bidirectional=True)
-        # self.dense = nn.Linear(100, 100)
-        # self.lstm2 = nn.LSTM(100, 26, num_layers=1)
 
     def forward(self, x):
         x = self.encoder(x)
-        x = self.maxpool(x)
-        x = x.squeeze(2)
-        x, _ = self.lstm1(x)
-        bs, sl, hs = x.shape
-        x = x.reshape((sl * bs, hs))
-        x = self.linear1(x)
-        x = x.reshape(bs, sl, -1)
-        x, _ = self.lstm2(x)
-        bs, sl, hs = x.shape
-        x = x.reshape((sl * bs, hs))
-        x = self.linear2(x)
-        x = x.view(bs, sl, -1)
+        shape = x.shape
+        x = x.reshape((shape[0], shape[2], shape[1] * shape[3]))
+        x, _ = self.bgru1(x)
+        x = self.dropout1(x)
+        bsize, seqlen, hsize = x.shape
+        x = x.reshape((seqlen * bsize, hsize))
+        x = self.dense1(x)
+        x = x.reshape((bsize, seqlen, -1))
+        x, _ = self.bgru2(x)
+        x = self.dropout2(x)
+        bsize, seqlen, hsize = x.shape
+        x = x.reshape((seqlen * bsize, hsize))
+        x = self.out(x)
+        x = x.reshape((bsize, seqlen, -1))
         x = self.softmax(x).transpose(0, 1)
 
         return x
+
+
+# class R(nn.Module):
+#     """Auxiliary "OCR" model to control the generator output"""
+
+#     def __init__(self):
+#         super(R, self).__init__()
+
+#         self.encoder = GatedConvolutions(1)
+#         self.maxpool = nn.MaxPool2d((120, 1))
+#         # self.maxpool = nn.MaxPool2d((118, 1))
+
+#         # Big version
+#         self.lstm1 = nn.LSTM(
+#             input_size=500,
+#             hidden_size=64,
+#             num_layers=1,
+#             bidirectional=True,
+#             batch_first=True,
+#         )
+#         self.linear1 = nn.Linear(128, 128)
+#         self.lstm2 = nn.LSTM(
+#             input_size=128,
+#             hidden_size=128,
+#             num_layers=1,
+#             bidirectional=True,
+#             batch_first=True,
+#         )
+#         self.linear2 = nn.Linear(256, 27)
+#         self.softmax = nn.LogSoftmax(dim=1)
+
+#         # Smol version doesn't work pls fix later
+#         # self.lstm1 = nn.LSTM(498, 50, num_layers=1, bidirectional=True)
+#         # self.dense = nn.Linear(100, 100)
+#         # self.lstm2 = nn.LSTM(100, 26, num_layers=1)
+
+#     def forward(self, x):
+#         x = self.encoder(x)
+#         x = self.maxpool(x)
+#         x = x.squeeze(2)
+#         x, _ = self.lstm1(x)
+#         bs, sl, hs = x.shape
+#         x = x.reshape((sl * bs, hs))
+#         x = self.linear1(x)
+#         x = x.reshape(bs, sl, -1)
+#         x, _ = self.lstm2(x)
+#         bs, sl, hs = x.shape
+#         x = x.reshape((sl * bs, hs))
+#         x = self.linear2(x)
+#         x = x.view(bs, sl, -1)
+#         x = self.softmax(x).transpose(0, 1)
+
+#         return x

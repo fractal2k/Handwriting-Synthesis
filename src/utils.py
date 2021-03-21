@@ -14,7 +14,7 @@ def imshow(inp, filename):
 
 
 def convert_word(word):
-    return [27 if c == "-" else ord(c) - 96 for c in word]
+    return [ord(c) - 96 for c in word]
 
 
 def preprocess_labels(labels):
