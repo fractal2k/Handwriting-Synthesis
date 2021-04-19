@@ -1,4 +1,5 @@
 import torch
+import config
 import torch.nn as nn
 from torch.nn.utils import spectral_norm
 from layers import (
@@ -7,8 +8,7 @@ from layers import (
     ResBlockUp,
     ResBlockDown,
     ResBlock,
-    GatedConvolution2d,
-    ConvolutionalEncoder,
+    BidirectionalLSTM,
 )
 
 
@@ -60,6 +60,7 @@ class GeneratorNetwork(nn.Module):
         self.concat_len = self.split_len + embedding_dim
         self.batch_size = batch_size
         self.dense1 = spectral_norm(nn.Linear(self.split_len, 1024))
+        # self.dropout = nn.Dropout(p=0.5)
 
         # inp, cbn_in, emb_size, cbn_hidden, batch_size, out
         self.resblock1 = ResBlockUp(
@@ -104,7 +105,6 @@ class GeneratorNetwork(nn.Module):
             if i == 4:
                 out, _ = self.self_attention(out)
             out = self.resblocks[i](noise_splits[i + 1], embedding, out)
-
         out = self.penultimate_activation(out)
         return self.final_activation(self.bn(self.conv(out)))
 
@@ -151,92 +151,64 @@ class DiscriminatorNetwork(nn.Module):
         return self.dense(x).view([x.shape[0]])
 
 
-# HTRFlor Model
+# TODO: Mention output size after every conv operation as a comment
 class R(nn.Module):
+    """ScrabbleGAN's OCR Network"""
+
     def __init__(self):
         super(R, self).__init__()
-        self.encoder = ConvolutionalEncoder(1)
-        self.bgru1 = nn.GRU(
-            input_size=8192, hidden_size=128, bidirectional=True, batch_first=True
+        ks = [3, 3, 3, 3, 3, 3, 2]
+        # ks_w = [3, 3, 3, 3, 3, 3, 3]
+        ps = [1, 1, 1, 1, 1, 0, 0]
+        # ps_w = [1, 1, 1, 1, 1, 1, 1]
+        ss = [1, 1, 1, 1, 1, 2, 2]
+        # ss_w = [1, 1, 1, 1, 1, 1, 1]
+        nm = [64, 128, 256, 256, 512, 512, 512]
+        cnn = nn.Sequential()
+        nh = 1024
+
+        def convRelu(i, batchNormalization=False):
+            nIn = 1 if i == 0 else nm[i - 1]
+            nOut = nm[i]
+            cnn.add_module(
+                "conv{0}".format(i), nn.Conv2d(nIn, nOut, ks[i], ss[i], ps[i])
+            )
+            if batchNormalization:
+                cnn.add_module("batchnorm{0}".format(i), nn.BatchNorm2d(nOut))
+
+            cnn.add_module("relu{0}".format(i), nn.ReLU(True))
+
+        convRelu(0)
+        cnn.add_module("pooling{0}".format(0), nn.MaxPool2d(2, 2))
+        convRelu(1)
+        cnn.add_module("pooling{0}".format(1), nn.MaxPool2d(2, (2, 2)))
+        convRelu(2, True)
+        convRelu(3)
+        cnn.add_module("pooling{0}".format(2), nn.MaxPool2d((2, 2), (2, 1), (0, 1)))
+        convRelu(4, True)
+        convRelu(5)
+        cnn.add_module("pooling{0}".format(4), nn.MaxPool2d((2, 2), (2, 1), (0, 1)))
+        convRelu(6, True)
+
+        self.cnn = cnn
+        self.rnn = nn.Sequential(
+            BidirectionalLSTM(512, nh, nh), BidirectionalLSTM(nh, config.NUM_TOKENS, nh)
         )
-        self.dropout1 = nn.Dropout(0.5)
-        self.dense1 = nn.Linear(256, 256)
-        self.bgru2 = nn.GRU(
-            input_size=256, hidden_size=128, bidirectional=True, batch_first=True
-        )
-        self.dropout2 = nn.Dropout(0.5)
-        self.out = nn.Linear(256, 27)
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.LogSoftmax(dim=2)
+
+    # Deal with nan/inf losses
+    # self.register_backward_hook(self.backward_hook)
 
     def forward(self, x):
-        x = self.encoder(x)
-        shape = x.shape
-        x = x.reshape((shape[0], shape[2], shape[1] * shape[3]))
-        x, _ = self.bgru1(x)
-        x = self.dropout1(x)
-        bsize, seqlen, hsize = x.shape
-        x = x.reshape((seqlen * bsize, hsize))
-        x = self.dense1(x)
-        x = x.reshape((bsize, seqlen, -1))
-        x, _ = self.bgru2(x)
-        x = self.dropout2(x)
-        bsize, seqlen, hsize = x.shape
-        x = x.reshape((seqlen * bsize, hsize))
-        x = self.out(x)
-        x = x.reshape((bsize, seqlen, -1))
-        x = self.softmax(x).transpose(0, 1)
+        conv = self.cnn(x)
+        print(conv.shape)
+        b, c, h, w = conv.shape
+        conv = conv.squeeze(2)
+        conv = conv.permute(2, 0, 1)
+        output = self.rnn(conv)
 
-        return x
+        return self.softmax(output)
 
-
-# class R(nn.Module):
-#     """Auxiliary "OCR" model to control the generator output"""
-
-#     def __init__(self):
-#         super(R, self).__init__()
-
-#         self.encoder = GatedConvolutions(1)
-#         self.maxpool = nn.MaxPool2d((120, 1))
-#         # self.maxpool = nn.MaxPool2d((118, 1))
-
-#         # Big version
-#         self.lstm1 = nn.LSTM(
-#             input_size=500,
-#             hidden_size=64,
-#             num_layers=1,
-#             bidirectional=True,
-#             batch_first=True,
-#         )
-#         self.linear1 = nn.Linear(128, 128)
-#         self.lstm2 = nn.LSTM(
-#             input_size=128,
-#             hidden_size=128,
-#             num_layers=1,
-#             bidirectional=True,
-#             batch_first=True,
-#         )
-#         self.linear2 = nn.Linear(256, 27)
-#         self.softmax = nn.LogSoftmax(dim=1)
-
-#         # Smol version doesn't work pls fix later
-#         # self.lstm1 = nn.LSTM(498, 50, num_layers=1, bidirectional=True)
-#         # self.dense = nn.Linear(100, 100)
-#         # self.lstm2 = nn.LSTM(100, 26, num_layers=1)
-
-#     def forward(self, x):
-#         x = self.encoder(x)
-#         x = self.maxpool(x)
-#         x = x.squeeze(2)
-#         x, _ = self.lstm1(x)
-#         bs, sl, hs = x.shape
-#         x = x.reshape((sl * bs, hs))
-#         x = self.linear1(x)
-#         x = x.reshape(bs, sl, -1)
-#         x, _ = self.lstm2(x)
-#         bs, sl, hs = x.shape
-#         x = x.reshape((sl * bs, hs))
-#         x = self.linear2(x)
-#         x = x.view(bs, sl, -1)
-#         x = self.softmax(x).transpose(0, 1)
-
-#         return x
+    # def backward_hook(self, module, grad_input, grad_output):
+    #     for g in grad_input:
+    #         g[g != g] = 0  # replace nan/inf with zero

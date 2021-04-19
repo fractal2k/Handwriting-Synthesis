@@ -2,20 +2,18 @@ import config
 import models
 import torch
 import numpy as np
-from tqdm import tqdm
 
 from train_rec import decode
 from dataset import get_dataloader
-from utils import preprocess_labels
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 
 def test():
     rec = models.R().to(device)
-    checkpoint = torch.load(f"{config.OUT_DIR}/checkpoint.pt")
-    rec.load_state_dict(checkpoint["rec"])
+    checkpoint = torch.load(f"{config.OUT_DIR}/rec_checkpoint.pt")
+    rec.load_state_dict(checkpoint["model"])
 
     _, loader = get_dataloader()
 

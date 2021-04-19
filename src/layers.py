@@ -256,110 +256,90 @@ class ResBlock(nn.Module):
         return x + self.conv3(initial)
 
 
-class GatedConvolution2d(nn.Module):
-    """Gated convolutional layer"""
+class BidirectionalLSTM(nn.Module):
+    def __init__(self, in_size, out_size, hidden_size):
+        super(BidirectionalLSTM, self).__init__()
 
-    def __init__(self, in_channels, out_channels, ksize, pad):
-        super(GatedConvolution2d, self).__init__()
-        self.filters = out_channels
-        self.conv = nn.Conv2d(
-            in_channels, out_channels * 2, kernel_size=ksize, padding=pad
-        )
+        self.lstm = nn.LSTM(in_size, hidden_size, bidirectional=True)
+        self.out = nn.Linear(hidden_size * 2, out_size)
 
     def forward(self, x):
-        x = self.conv(x)
-        x_1 = x[:, : self.filters, :, :]
-        x_sigmoid = x[:, self.filters :, :, :]
-        x_sigmoid = torch.sigmoid(x_sigmoid)
+        output, _ = self.lstm(x)
+        seqlen, bsize, hsize = output.shape
+        output = output.reshape(seqlen * bsize, hsize)
+        output = self.out(output)
+        output = output.reshape(seqlen, bsize, -1)
 
-        return x_1 * x_sigmoid
-
-
-class ConvolutionalEncoder(nn.Module):
-    def __init__(self, in_channels):
-        super(ConvolutionalEncoder, self).__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=3, stride=(1, 2), padding=(1, 257)),
-            nn.PReLU(),
-            nn.BatchNorm2d(16),
-            GatedConvolution2d(16, 16, 3, 1),
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.PReLU(),
-            nn.BatchNorm2d(32),
-            GatedConvolution2d(32, 32, 3, 1),
-        )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(32, 40, kernel_size=(2, 4), stride=(2, 4), padding=(64, 768)),
-            nn.PReLU(),
-            nn.BatchNorm2d(40),
-            GatedConvolution2d(40, 40, 3, 1),
-            nn.Dropout(0.2),
-        )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(40, 48, kernel_size=3, padding=1),
-            nn.PReLU(),
-            nn.BatchNorm2d(48),
-            GatedConvolution2d(48, 48, 3, 1),
-            nn.Dropout(0.2),
-        )
-        self.conv5 = nn.Sequential(
-            nn.Conv2d(
-                48, 56, kernel_size=(2, 4), stride=(2, 4)
-            ),  # , padding=(64, 768)),
-            nn.PReLU(),
-            nn.BatchNorm2d(56),
-            GatedConvolution2d(56, 56, 3, 1),
-            nn.Dropout(0.2),
-        )
-        self.conv6 = nn.Sequential(
-            nn.Conv2d(56, 64, kernel_size=3, padding=1), nn.PReLU(), nn.BatchNorm2d(64)
-        )
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
-
-        return x
+        return output
 
 
-# class GatedConvolutions(nn.Module):
-#     """Gated Convolutional Encoder"""
+# class GatedConvolution2d(nn.Module):
+#     """Gated convolutional layer"""
 
-#     def __init__(self, in_channels=1):
-#         super(GatedConvolutions, self).__init__()
-
-#         # Big version
-#         self.conv1 = nn.Conv2d(in_channels, 8, kernel_size=3)
-#         self.conv2 = nn.Conv2d(8, 16, kernel_size=(2, 4))
-#         self.gate1 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-#         self.conv3 = nn.Conv2d(16, 32, kernel_size=3)
-#         self.gate2 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-#         self.conv4 = nn.Conv2d(32, 64, kernel_size=(2, 4))
-#         self.conv5 = nn.Conv2d(64, 128, kernel_size=3)
-#         # Smol version
-#         # self.conv1 = nn.Conv2d(in_channels, 4, kernel_size=3)
-#         # self.conv2 = nn.Conv2d(4, 8, kernel_size=(2,4))
-#         # self.gate1 = nn.Conv2d(8, 8, kernel_size=3, padding = 1)
-#         # self.conv3 = nn.Conv2d(8, 16, kernel_size=3)
-#         # self.gate2 = nn.Conv2d(16, 16, kernel_size=3, padding = 1)
-#         # self.conv4 = nn.Conv2d(16, 24, kernel_size=(2,4))
-#         # self.conv5 = nn.Conv2d(24, 32, kernel_size=3)
-#         # self.conv6 = nn.Conv2d(32, 64, kernel_size=3)
+#     def __init__(self, in_channels, out_channels, ksize, pad):
+#         super(GatedConvolution2d, self).__init__()
+#         self.filters = out_channels
+#         self.conv = nn.Conv2d(
+#             in_channels, out_channels * 2, kernel_size=ksize, padding=pad
+#         )
 
 #     def forward(self, x):
-#         x = torch.tanh(self.conv1(x))
-#         x = torch.tanh(self.conv2(x))
-#         x = torch.sigmoid(self.gate1(x)) * x
-#         x = torch.tanh(self.conv3(x))
-#         x = torch.sigmoid(self.gate2(x)) * x
-#         x = torch.tanh(self.conv4(x))
-#         x = torch.tanh(self.conv5(x))
-#         # x = torch.tanh(self.conv6(x))
+#         x = self.conv(x)
+#         x_1 = x[:, : self.filters, :, :]
+#         x_sigmoid = x[:, self.filters :, :, :]
+#         x_sigmoid = torch.sigmoid(x_sigmoid)
+
+#         return x_1 * x_sigmoid
+
+
+# class ConvolutionalEncoder(nn.Module):
+#     def __init__(self, in_channels):
+#         super(ConvolutionalEncoder, self).__init__()
+#         self.conv1 = nn.Sequential(
+#             nn.Conv2d(in_channels, 16, kernel_size=3, stride=(1, 2), padding=(1, 257)),
+#             nn.PReLU(),
+#             nn.BatchNorm2d(16),
+#             GatedConvolution2d(16, 16, 3, 1),
+#         )
+#         self.conv2 = nn.Sequential(
+#             nn.Conv2d(16, 32, kernel_size=3, padding=1),
+#             nn.PReLU(),
+#             nn.BatchNorm2d(32),
+#             GatedConvolution2d(32, 32, 3, 1),
+#         )
+#         self.conv3 = nn.Sequential(
+#             nn.Conv2d(32, 40, kernel_size=(2, 4), stride=(2, 4), padding=(64, 768)),
+#             nn.PReLU(),
+#             nn.BatchNorm2d(40),
+#             GatedConvolution2d(40, 40, 3, 1),
+#             nn.Dropout(0.2),
+#         )
+#         self.conv4 = nn.Sequential(
+#             nn.Conv2d(40, 48, kernel_size=3, padding=1),
+#             nn.PReLU(),
+#             nn.BatchNorm2d(48),
+#             GatedConvolution2d(48, 48, 3, 1),
+#             nn.Dropout(0.2),
+#         )
+#         self.conv5 = nn.Sequential(
+#             nn.Conv2d(
+#                 48, 56, kernel_size=(2, 4), stride=(2, 4)
+#             ),  # , padding=(64, 768)),
+#             nn.PReLU(),
+#             nn.BatchNorm2d(56),
+#             GatedConvolution2d(56, 56, 3, 1),
+#             nn.Dropout(0.2),
+#         )
+#         self.conv6 = nn.Sequential(
+#             nn.Conv2d(56, 64, kernel_size=3, padding=1), nn.PReLU(), nn.BatchNorm2d(64)
+#         )
+
+#     def forward(self, x):
+#         x = self.conv1(x)
+#         x = self.conv2(x)
+#         x = self.conv3(x)
+#         x = self.conv4(x)
+#         x = self.conv5(x)
+#         x = self.conv6(x)
 
 #         return x

@@ -1,4 +1,5 @@
 import torch
+import pickle
 import config
 import models
 import torchvision
@@ -32,16 +33,47 @@ def init_inference():
     return lm, gen
 
 
-def inference(inp, filename):
+def inference_tb(inp, writer):
     lm, gen = init_inference()
     checkpoint = torch.load(f"{config.OUT_DIR}/checkpoint.pt")
+
+    ctoi_file = open("ctoi.txt", "rb")
+    encoding_dict = pickle.load(ctoi_file)
+    ctoi_file.close()
+
     # print(
     #     f'Checkpoint Details:\n Trained for: {checkpoint["epoch"]} epochs, Final Generator loss: {checkpoint["gen_loss"]}, Log File: {checkpoint["log_file"]}'
     # )
     lm.load_state_dict(checkpoint["lm"])
     gen.load_state_dict(checkpoint["gen"])
 
-    test = preprocess_labels([inp] * config.BATCH_SIZE)
+    test = preprocess_labels([inp] * config.BATCH_SIZE, encoding_dict)
+    with torch.no_grad():
+        lm.eval()
+        gen.eval()
+        zin = generate_noise(config.Z_LEN, config.BATCH_SIZE, device)
+        gin = lm(test.to(device))
+        gout = gen(zin, gin)
+        tgrid = torchvision.utils.make_grid(gout.detach().cpu(), nrow=4)
+        writer.add_image(str(checkpoint["epoch"]), tgrid)
+
+    # print(f'Inference Finished. Check "out" directory for {args.inp}.png')
+
+
+def inference(inp, filename):
+    lm, gen = init_inference()
+    checkpoint = torch.load(f"{config.OUT_DIR}/checkpoint.pt")
+
+    ctoi_file = open("ctoi.txt", "rb")
+    encoding_dict = pickle.load(ctoi_file)
+    ctoi_file.close()
+    # print(
+    #     f'Checkpoint Details:\n Trained for: {checkpoint["epoch"]} epochs, Final Generator loss: {checkpoint["gen_loss"]}, Log File: {checkpoint["log_file"]}'
+    # )
+    lm.load_state_dict(checkpoint["lm"])
+    gen.load_state_dict(checkpoint["gen"])
+
+    test = preprocess_labels([inp] * config.BATCH_SIZE, encoding_dict)
     with torch.no_grad():
         lm.eval()
         gen.eval()
@@ -54,5 +86,5 @@ def inference(inp, filename):
     # print(f'Inference Finished. Check "out" directory for {args.inp}.png')
 
 
-# if __name__ == "__main__":
-#     inference(args.inp, args.inp)
+if __name__ == "__main__":
+    inference("ruchita", "ruchita")

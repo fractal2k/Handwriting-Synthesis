@@ -1,4 +1,5 @@
 import torch
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -13,15 +14,15 @@ def imshow(inp, filename):
     plt.close(fig)
 
 
-def convert_word(word):
-    return [ord(c) - 96 for c in word]
+def convert_word(word, encoding_dict):
+    return [encoding_dict[c] for c in word]
 
 
-def preprocess_labels(labels):
+def preprocess_labels(labels, encoding_dict):
     max_len = len(max(labels, key=len))
     final = []
     for label in labels:
-        encoding = convert_word(label) + [0] * (max_len - len(label))
+        encoding = convert_word(label, encoding_dict) + [0] * (max_len - len(label))
         final.append(encoding)
 
     return torch.LongTensor(final).transpose(0, 1)
