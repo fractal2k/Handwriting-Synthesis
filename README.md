@@ -75,7 +75,7 @@ The script creates training logs in a separate folder  `./src/runs/`, which you 
 
 ## Dataset
 
-Instead of using RIMES and OpenHart datasets the authors have used, we tried to use an english dataset. To that end, we decided to create a custom dataset using [Sujay](https://github.com/fractal2k)'s handwriting.
+Instead of using RIMES and OpenHart datasets the authors have used, we tried to use an english dataset. To that end, we decided to create a custom dataset using my handwriting.
 
 A sample from the custom dataset looks like this:
 
@@ -86,7 +86,7 @@ All individual words are extracted using the `box_extraction.py` script using th
 python box_extraction.py <DATASET_DIRECTORY> <TARGET_DIRECTORY>
 ```
 
-where <DATASET_DIRECTORY> is the directory containing all such grid file images (in `.jpg` format) and <TARGET_DIRECTORY> is the folder in which you need all the individual samples.
+where `<DATASET_DIRECTORY>` is the directory containing all such grid file images (in `.jpg` format) and `<TARGET_DIRECTORY>` is the folder in which you need all the individual samples.
 
 All individual words were then manually labelled, i.e. renamed in the format: `<word> (<sample number>).png`
 
