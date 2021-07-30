@@ -201,7 +201,6 @@ class R(nn.Module):
 
     def forward(self, x):
         conv = self.cnn(x)
-        print(conv.shape)
         b, c, h, w = conv.shape
         conv = conv.squeeze(2)
         conv = conv.permute(2, 0, 1)

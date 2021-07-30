@@ -18,6 +18,20 @@ def convert_word(word, encoding_dict):
     return [encoding_dict[c] for c in word]
 
 
+def convert_word_old(word):
+    return [ord(c) - 96 for c in word]
+
+
+def preprocess_old(labels):
+    max_len = len(max(labels, key=len))
+    final = []
+    for label in labels:
+        encoding = convert_word_old(label) + [0] * (max_len - len(label))
+        final.append(encoding)
+
+    return torch.LongTensor(final).transpose(0, 1)
+
+
 def preprocess_labels(labels, encoding_dict):
     max_len = len(max(labels, key=len))
     final = []
